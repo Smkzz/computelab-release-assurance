@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=77,<83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "computelab-release-assurance"
+dynamic = ["version"]
+description = "Contract-based regression checks for OpenAI-compatible LLM endpoints"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Computelab contributors" }]
+dependencies = ["jsonschema>=4.26,<5"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Testing",
+]
+
+[project.scripts]
+computelab-release = "computelab_release.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=9,<10", "ruff>=0.12,<0.17", "mypy>=1.15,<3", "types-jsonschema", "build>=1.2,<2"]
+security = ["pip-audit>=2.9,<3"]
+
+[tool.setuptools.dynamic]
+version = { attr = "computelab_release.models.VERSION" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["computelab_release*"]
+
+[tool.setuptools.package-data]
+computelab_release = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/computelab_release"]

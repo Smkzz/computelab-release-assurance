@@ -1,0 +1,64 @@
+{
+  "acceptance": {
+    "max_failure_rate": 0,
+    "max_malformed_output_rate": 0,
+    "min_samples": 2
+  },
+  "cases": [
+    {
+      "id": "function-001",
+      "max_tokens": 64,
+      "messages": [
+        {
+          "content": "Call get_status with service set to api.",
+          "role": "user"
+        }
+      ],
+      "required_tool_calls": [
+        {
+          "arguments": {
+            "service": "api"
+          },
+          "name": "get_status"
+        }
+      ],
+      "safe_to_store": false,
+      "stream": true,
+      "temperature": 0,
+      "tool_choice": {
+        "function": {
+          "name": "get_status"
+        },
+        "type": "function"
+      },
+      "tools": [
+        {
+          "function": {
+            "description": "Get a synthetic service status",
+            "name": "get_status",
+            "parameters": {
+              "additionalProperties": false,
+              "properties": {
+                "service": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "service"
+              ],
+              "type": "object"
+            }
+          },
+          "type": "function"
+        }
+      ]
+    }
+  ],
+  "description": "Replace this synthetic case with operator-approved test inputs.",
+  "environment": {
+    "candidate_must_match": []
+  },
+  "name": "Required function call",
+  "repeats": 2,
+  "schema_version": "release-assurance-contract/v1"
+}

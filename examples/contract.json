@@ -1,0 +1,41 @@
+{
+  "acceptance": {
+    "max_failure_rate": 0,
+    "max_malformed_output_rate": 0,
+    "min_samples": 2
+  },
+  "cases": [
+    {
+      "expected_json_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "type": "object"
+      },
+      "id": "structured-json-001",
+      "max_tokens": 64,
+      "messages": [
+        {
+          "content": "Return JSON with answer equal to healthy.",
+          "role": "user"
+        }
+      ],
+      "safe_to_store": false,
+      "stream": false,
+      "temperature": 0
+    }
+  ],
+  "description": "Replace this synthetic case with operator-approved test inputs.",
+  "environment": {
+    "candidate_must_match": []
+  },
+  "name": "Structured-output compatibility",
+  "repeats": 2,
+  "schema_version": "release-assurance-contract/v1"
+}
