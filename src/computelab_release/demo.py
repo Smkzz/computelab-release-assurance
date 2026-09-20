@@ -16,7 +16,7 @@ class DemoHandler(BaseHTTPRequestHandler):
     """A deliberately small local test server, never a production endpoint."""
 
     def log_message(self, format: str, *args: Any) -> None:
-        pass
+        del format, args
 
     def do_POST(self) -> None:
         length = self.headers.get("Content-Length", "")

@@ -128,51 +128,178 @@ def render_report(receipt: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _verify_expected_manifest(manifest_hash: str, expected_manifest: str | None) -> None:
+    if expected_manifest is None:
+        return
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_manifest) or expected_manifest != manifest_hash:
+        raise EvidenceValidationError("trusted_manifest_mismatch")
+
+
+def _manifest_file_map(run_dir: Path, run_id: Any) -> dict[str, Any]:
+    manifest = read_json(safe_path(run_dir, "manifest.json"))
+    if (
+        set(manifest) != {"schema_version", "run_id", "files"}
+        or manifest.get("schema_version") != MANIFEST_SCHEMA
+        or manifest.get("run_id") != run_id
+    ):
+        raise EvidenceValidationError("manifest_identity_invalid")
+    files = manifest.get("files")
+    if not isinstance(files, dict) or set(files) != REQUIRED_FILES:
+        raise EvidenceValidationError("manifest_required_file_set_mismatch")
+    expected_names = REQUIRED_FILES | {"manifest.json"}
+    if {path.name for path in run_dir.iterdir()} != expected_names:
+        raise EvidenceValidationError("unexpected_or_missing_run_artifact")
+    return files
+
+
+def _verify_manifest_files(run_dir: Path, files: dict[str, Any]) -> None:
+    for relative, expected in files.items():
+        if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise EvidenceValidationError("artifact_hash_mismatch")
+        path = safe_path(run_dir, relative)
+        if not path.is_file() or sha256_file(path) != expected:
+            raise EvidenceValidationError("artifact_hash_mismatch")
+
+
+def _verify_manifest(run_dir: Path, run_id: Any, expected_manifest: str | None) -> str:
+    manifest_hash = sha256_file(safe_path(run_dir, "manifest.json"))
+    _verify_expected_manifest(manifest_hash, expected_manifest)
+    _verify_manifest_files(run_dir, _manifest_file_map(run_dir, run_id))
+    return manifest_hash
+
+
+def _verify_receipt_header(receipt: dict[str, Any], run_id: Any) -> None:
+    if (
+        receipt.get("schema_version") != RECEIPT_SCHEMA
+        or receipt.get("product_version") != PRODUCT_VERSION
+        or receipt.get("run_id") != run_id
+    ):
+        raise EvidenceValidationError("receipt_identity_invalid")
+
+
+def _verify_progress_header(progress: dict[str, Any], run_id: Any) -> None:
+    if (
+        progress.get("run_id") != run_id
+        or progress.get("status") != "complete"
+        or progress.get("in_flight") is not None
+    ):
+        raise EvidenceValidationError("progress_not_complete")
+
+
+def _verify_run_parameters(identity: dict[str, Any]) -> int:
+    repeats, timeout = identity["repeats"], identity["timeout_s"]
+    valid_repeats = type(repeats) is int and 1 <= repeats <= 100
+    if not valid_repeats or not finite_number(timeout, 0.05, 600):
+        raise EvidenceValidationError("run_parameters_invalid")
+    return int(repeats)
+
+
+def _verify_input_identity(
+    identity: dict[str, Any],
+    progress: dict[str, Any],
+    project: dict[str, Any],
+    contract: dict[str, Any],
+) -> None:
+    if (
+        identity != progress.get("identity")
+        or identity.get("project_hash") != project_hash(project)
+        or identity.get("contract_hash") != contract_hash(contract)
+    ):
+        raise EvidenceValidationError("receipt_input_identity_mismatch")
+
+
+def _verify_deployment_identity(
+    identity: dict[str, Any], deployments: dict[str, dict[str, Any]]
+) -> None:
+    expected = {role: value["deployment_hash"] for role, value in deployments.items()}
+    if identity.get("deployment_hashes") != expected:
+        raise EvidenceValidationError("receipt_deployment_identity_mismatch")
+
+
+def _verify_runtime_identity(identity: dict[str, Any]) -> None:
+    from .runner import POLICY
+
+    runtime = identity.get("runtime", {})
+    if runtime.get("policy") != POLICY or runtime.get("product_version") != PRODUCT_VERSION:
+        raise EvidenceValidationError("unsupported_evaluation_policy")
+
+
+def _verify_run_identity(
+    receipt: dict[str, Any],
+    progress: dict[str, Any],
+    run_id: Any,
+    project: dict[str, Any],
+    contract: dict[str, Any],
+    deployments: dict[str, dict[str, Any]],
+) -> int:
+    _verify_receipt_header(receipt, run_id)
+    _verify_progress_header(progress, run_id)
+    identity = receipt["identity"]
+    repeats = _verify_run_parameters(identity)
+    _verify_input_identity(identity, progress, project, contract)
+    _verify_deployment_identity(identity, deployments)
+    _verify_runtime_identity(identity)
+    return repeats
+
+
+def _verify_decision(
+    receipt: dict[str, Any],
+    progress: dict[str, Any],
+    contract: dict[str, Any],
+    deployments: dict[str, dict[str, Any]],
+    repeats: int,
+) -> None:
+    from .runner import _jobs, aggregate, decide, validate_results
+
+    jobs = _jobs(contract, repeats)
+    if progress.get("jobs") != jobs or progress.get("results") != receipt.get("results"):
+        raise EvidenceValidationError("progress_receipt_mismatch")
+    validate_results(receipt.get("results"), jobs, contract, deployments)
+    aggregates = {r: aggregate(receipt["results"], r) for r in deployments}
+    verdict, findings = decide(contract, deployments, aggregates)
+    if (
+        receipt.get("summary") != {"verdict": verdict, "aggregates": aggregates}
+        or receipt.get("findings") != findings
+    ):
+        raise EvidenceValidationError("decision_recomputation_mismatch")
+
+
+def _verify_reports(
+    run_dir: Path,
+    receipt: dict[str, Any],
+    contract: dict[str, Any],
+    deployments: dict[str, dict[str, Any]],
+    repeats: int,
+) -> None:
+    expected_deployments = {
+        r: {"model": d["model"], "endpoint_origin": public_endpoint(d["endpoint"])}
+        for r, d in deployments.items()
+    }
+    if receipt.get("deployments") != expected_deployments:
+        raise EvidenceValidationError("reported_deployment_mismatch")
+    if (
+        receipt.get("contract_name") != contract["name"]
+        or receipt.get("scope", {}).get("cases") != [c["id"] for c in contract["cases"]]
+        or receipt["scope"].get("repeats") != repeats
+    ):
+        raise EvidenceValidationError("scope_mismatch")
+    if read_json(safe_path(run_dir, "report.json")) != receipt:
+        raise EvidenceValidationError("json_report_mismatch")
+    if read_bounded_bytes(safe_path(run_dir, "report.md")).decode("utf-8") != render_report(
+        receipt
+    ):
+        raise EvidenceValidationError("markdown_report_mismatch")
+
+
 def verify_project(project_dir: Path, expected_manifest: str | None = None) -> dict[str, Any]:
-    from .runner import (
-        POLICY,
-        _jobs,
-        _load,
-        _run_dir,
-        aggregate,
-        decide,
-        project_root,
-        validate_results,
-    )
+    from .runner import _load, _run_dir, project_root
 
     try:
         root = project_root(project_dir)
         project, current_contract, current_deployments = _load(root)
         run_id = project.get("latest_run_id")
         run_dir = _run_dir(root, run_id)
-        manifest_path = safe_path(run_dir, "manifest.json")
-        manifest_hash = sha256_file(manifest_path)
-        if expected_manifest is not None and (
-            not re.fullmatch(r"[0-9a-f]{64}", expected_manifest)
-            or expected_manifest != manifest_hash
-        ):
-            raise EvidenceValidationError("trusted_manifest_mismatch")
-        manifest = read_json(manifest_path)
-        if (
-            set(manifest) != {"schema_version", "run_id", "files"}
-            or manifest.get("schema_version") != MANIFEST_SCHEMA
-            or manifest.get("run_id") != run_id
-        ):
-            raise EvidenceValidationError("manifest_identity_invalid")
-        files = manifest.get("files")
-        if not isinstance(files, dict) or set(files) != REQUIRED_FILES:
-            raise EvidenceValidationError("manifest_required_file_set_mismatch")
-        if {path.name for path in run_dir.iterdir()} != REQUIRED_FILES | {"manifest.json"}:
-            raise EvidenceValidationError("unexpected_or_missing_run_artifact")
-        for relative, expected in files.items():
-            path = safe_path(run_dir, relative)
-            if (
-                not isinstance(expected, str)
-                or not re.fullmatch(r"[0-9a-f]{64}", expected)
-                or not path.is_file()
-                or sha256_file(path) != expected
-            ):
-                raise EvidenceValidationError("artifact_hash_mismatch")
+        manifest_hash = _verify_manifest(run_dir, run_id, expected_manifest)
         inputs = read_json(safe_path(run_dir, "inputs.json"))
         contract, deployments, recorded_project = (
             inputs["contract"],
@@ -193,70 +320,9 @@ def verify_project(project_dir: Path, expected_manifest: str | None = None) -> d
             raise EvidenceValidationError("current_inputs_do_not_match_run")
         receipt = read_json(safe_path(run_dir, "receipt.json"))
         progress = read_json(safe_path(run_dir, "progress.json"))
-        if (
-            receipt.get("schema_version") != RECEIPT_SCHEMA
-            or receipt.get("product_version") != PRODUCT_VERSION
-            or receipt.get("run_id") != run_id
-        ):
-            raise EvidenceValidationError("receipt_identity_invalid")
-        if (
-            progress.get("run_id") != run_id
-            or progress.get("status") != "complete"
-            or progress.get("in_flight") is not None
-        ):
-            raise EvidenceValidationError("progress_not_complete")
-        identity = receipt["identity"]
-        repeats, timeout = identity["repeats"], identity["timeout_s"]
-        if (
-            type(repeats) is not int
-            or not 1 <= repeats <= 100
-            or not finite_number(timeout, 0.05, 600)
-        ):
-            raise EvidenceValidationError("run_parameters_invalid")
-        if (
-            identity != progress.get("identity")
-            or identity.get("project_hash") != project_hash(project)
-            or identity.get("contract_hash") != contract_hash(contract)
-        ):
-            raise EvidenceValidationError("receipt_input_identity_mismatch")
-        if identity.get("deployment_hashes") != {
-            r: d["deployment_hash"] for r, d in deployments.items()
-        }:
-            raise EvidenceValidationError("receipt_deployment_identity_mismatch")
-        if (
-            identity.get("runtime", {}).get("policy") != POLICY
-            or identity.get("runtime", {}).get("product_version") != PRODUCT_VERSION
-        ):
-            raise EvidenceValidationError("unsupported_evaluation_policy")
-        jobs = _jobs(contract, repeats)
-        if progress.get("jobs") != jobs or progress.get("results") != receipt.get("results"):
-            raise EvidenceValidationError("progress_receipt_mismatch")
-        validate_results(receipt.get("results"), jobs, contract, deployments)
-        aggregates = {r: aggregate(receipt["results"], r) for r in deployments}
-        verdict, findings = decide(contract, deployments, aggregates)
-        if (
-            receipt.get("summary") != {"verdict": verdict, "aggregates": aggregates}
-            or receipt.get("findings") != findings
-        ):
-            raise EvidenceValidationError("decision_recomputation_mismatch")
-        expected_deployments = {
-            r: {"model": d["model"], "endpoint_origin": public_endpoint(d["endpoint"])}
-            for r, d in deployments.items()
-        }
-        if receipt.get("deployments") != expected_deployments:
-            raise EvidenceValidationError("reported_deployment_mismatch")
-        if (
-            receipt.get("contract_name") != contract["name"]
-            or receipt.get("scope", {}).get("cases") != [c["id"] for c in contract["cases"]]
-            or receipt["scope"].get("repeats") != repeats
-        ):
-            raise EvidenceValidationError("scope_mismatch")
-        if read_json(safe_path(run_dir, "report.json")) != receipt:
-            raise EvidenceValidationError("json_report_mismatch")
-        if read_bounded_bytes(safe_path(run_dir, "report.md")).decode("utf-8") != render_report(
-            receipt
-        ):
-            raise EvidenceValidationError("markdown_report_mismatch")
+        repeats = _verify_run_identity(receipt, progress, run_id, project, contract, deployments)
+        _verify_decision(receipt, progress, contract, deployments, repeats)
+        _verify_reports(run_dir, receipt, contract, deployments, repeats)
         return {
             "valid": True,
             "run_id": run_id,

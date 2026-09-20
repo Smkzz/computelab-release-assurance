@@ -78,7 +78,7 @@ def test_multibyte_split_and_tool_reconstruction() -> None:
         b"data: {}\n\n",
         b"data: nope\n\n",
         b"data: [DONE]\n\n",
-        b'data: {"error":{"secret":"DO_NOT_ECHO"}}\n\n',
+        b'data: {"error":{"secret":"DO_NOT_ECHO"}}\n\n',  # pragma: allowlist secret
         b'data: {"choices":[{"index":1,"delta":{}}]}\n\n',
         b'data: {"choices":[{"delta":{"tool_calls":[{"index":true}]}}]}\n\n',
         b'data: {"choices":[{"delta":{"content":17}}]}\n\n',
@@ -206,7 +206,7 @@ def test_missing_usage_does_not_become_wordcount() -> None:
 
 
 def test_plaintext_bearer_never_sent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TEST_API_KEY", "PRIVATE_BEARER_SENTINEL")
+    monkeypatch.setenv("TEST_API_KEY", "PRIVATE_BEARER_SENTINEL")  # pragma: allowlist secret
     with response_server("no_usage") as (url, hits):
         r = OpenAICompatibleClient({"endpoint": url, "api_key_env": "TEST_API_KEY"}).complete({})
         assert not r.ok and r.error_kind == "unsafe_credential_transport" and hits == []
@@ -214,9 +214,12 @@ def test_plaintext_bearer_never_sent(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_missing_credential(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("ABSENT_API_KEY", raising=False)
+    monkeypatch.delenv("ABSENT_API_KEY", raising=False)  # pragma: allowlist secret
     r = OpenAICompatibleClient(
-        {"endpoint": "https://example.invalid", "api_key_env": "ABSENT_API_KEY"}
+        {
+            "endpoint": "https://example.invalid",
+            "api_key_env": "ABSENT_API_KEY",  # pragma: allowlist secret
+        }  # pragma: allowlist secret
     ).complete({})
     assert r.error_kind == "missing_api_key"
 
