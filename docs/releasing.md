@@ -1,42 +1,40 @@
 # Maintainer release procedure
 
-Publish only this standalone project, never the private research repository or its
-history. Do not copy runtime projects, prompts, endpoint credentials, prospect
-records, generated evidence, virtual environments, or model artifacts into Git.
+Release only the reviewed standalone source tree. Do not include runtime projects, prompts, endpoint credentials, real evaluation evidence, customer data, virtual environments, caches, build directories, or model artifacts.
 
 ## Before publication
 
-Confirm copyright ownership and the prepared MIT license. Create a new repository
-from the audited source allowlist. Review every initial tracked file; do not use a
-recursive `git add` from a parent directory. Record the release source-tree digest.
+Confirm the intended version and license, review every tracked file, and verify that the working tree contains no unexpected untracked material. Do not use a recursive add from a parent workspace. Record the exact Git commit and release-artifact digest.
 
-Run the commands in CONTRIBUTING.md in clean environments. The CPU workflow tests
-Python 3.11 and 3.13 on Linux and 3.13 on Windows; configured jobs are not evidence
-until they actually run. Complete formatting, lint, strict typing, dependency
-vulnerability scanning and secret scanning before declaring a release ready.
-Inspect the source distribution and wheel, then install the wheel outside the
-checkout and run the synthetic demo without PYTHONPATH or editable-install access.
-Never claim untested platforms or a clean vulnerability database result.
+Run the complete quality gate from the README in a clean environment. Hosted CI currently covers Python 3.11 and 3.13 on Linux and Python 3.13 on Windows. Configured jobs are not evidence until the actual commit has passed them.
+
+Release qualification requires:
+
+- full test suite with branch coverage
+- at least 95% production branch coverage overall and 90% per production Python module
+- normal Ruff lint and format checks
+- Radon A maintainability (MI ≥ 20) for every production module and cyclomatic complexity ≤ 10 per block
+- strict Ruff complexity checks (`C901`, `PLR0911`, `PLR0912`, `PLR0915`)
+- Vulture dead-code scan
+- strict mypy
+- Bandit static security analysis
+- dependency vulnerability audit
+- source/distribution boundary inspection
+- wheel installation and demo/verification outside the checkout
+- repository secret scanning and push protection
+
+Never claim an unexecuted platform or vulnerability scan as passing.
 
 ## Repository settings
 
-Enable private vulnerability reporting and verify the Security tab provides a
-private reporting route before linking it publicly. Enable secret scanning/push
-protection and dependency alerts where available. Protect the default branch with
-required checks and review; keep workflow token permissions read-only. Do not
-attach self-hosted runners to untrusted public pull requests. Do not configure
-live inference credentials in the public test workflow.
+Keep private vulnerability reporting, secret scanning/push protection, dependency alerts, and protected-branch review enabled where the hosting account supports them. Required checks must protect the default branch. CI workflow permissions stay read-only and public pull requests must never receive production endpoints, model credentials, publishing credentials, or personal self-hosted runners.
 
-Confirm the selected repository/account's Actions usage terms and spending limits
-before enabling CI. No paid runners or API/GPU tests are necessary for this suite.
+Confirm the repository/account's Actions usage terms and spending limits before changing CI. No paid runners, inference APIs, or GPUs are required by this suite.
 
 ## Distribution
 
-Build with `python -m build`; run `python tools/check_release.py` and
-`python tools/wheel_smoke.py`. Include source, wheel, changelog and SHA-256 checksums
-only after their gates pass. A checksum supports integrity, not publisher identity.
-Use a reviewed signed tag or artifact attestation when a real signing identity is
-available; do not manufacture signatures or provenance. PyPI publishing is a
-separate explicit maintainer action, not an automatic workflow in this project.
+Build with `python -m build`, then run `python tools/check_release.py` and `python tools/wheel_smoke.py`. Inspect the source distribution and wheel before publication. Attach only reviewed release artifacts and publish SHA-256 checksums from the sealed files. A checksum provides integrity, not publisher identity.
 
-This project has no automatic deployment, package publication or release action.
+Use a reviewed signed tag or artifact attestation when a real signing identity is available; never manufacture provenance. PyPI publishing is a separate explicit maintainer action and is not automatic in this repository.
+
+After publication, download the hosted asset again, recompute its digest, and verify that the release tag resolves to the intended commit.

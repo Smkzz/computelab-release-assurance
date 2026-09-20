@@ -66,66 +66,78 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _qualify_exit_code(verdict: str) -> int:
+    if verdict == "PASS":
+        return 0
+    if verdict == "FAIL":
+        return 1
+    return 3
+
+
+def _dispatch(args: argparse.Namespace) -> int:
+    if args.command == "init":
+        result = initialize_project(args.project, args.name)
+    elif args.command == "register":
+        deployment = register_deployment(
+            args.project,
+            args.role,
+            args.url,
+            args.model,
+            args.api_key_env,
+            args.environment_json,
+        )
+        result = {"role": deployment["role"], "deployment_hash": deployment["deployment_hash"]}
+    elif args.command == "define-contract":
+        contract = define_contract(args.project, args.input)
+        result = {"contract_sha256": contract_hash(contract)}
+    elif args.command == "qualify":
+        receipt = qualify(
+            args.project,
+            repeats=args.repeats,
+            timeout_s=args.timeout,
+            resume=args.resume,
+            stop_after=args.stop_after,
+        )
+        verdict = receipt["summary"]["verdict"]
+        print(
+            pretty_json(
+                {
+                    "verdict": verdict,
+                    "run_id": receipt["run_id"],
+                    "report": f"runs/{receipt['run_id']}/report.md",
+                }
+            ),
+            end="",
+        )
+        return _qualify_exit_code(verdict)
+    elif args.command == "verify":
+        result = verify_project(args.project, args.expected_manifest)
+        print(pretty_json(result), end="")
+        return 0 if result["valid"] else 4
+    elif args.command in {"show", "report"}:
+        receipt = load_latest_receipt(args.project)
+        if args.command == "report":
+            print(render_report(receipt), end="")
+            return 0
+        result = {
+            "run_id": receipt["run_id"],
+            "summary": receipt["summary"],
+            "findings": receipt["findings"],
+        }
+    elif args.command == "demo":
+        from .demo import run_demo
+
+        result = run_demo(args.output)
+    else:
+        return 2
+    print(pretty_json(result), end="")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        if args.command == "init":
-            result = initialize_project(args.project, args.name)
-        elif args.command == "register":
-            deployment = register_deployment(
-                args.project,
-                args.role,
-                args.url,
-                args.model,
-                args.api_key_env,
-                args.environment_json,
-            )
-            result = {"role": deployment["role"], "deployment_hash": deployment["deployment_hash"]}
-        elif args.command == "define-contract":
-            contract = define_contract(args.project, args.input)
-            result = {"contract_sha256": contract_hash(contract)}
-        elif args.command == "qualify":
-            receipt = qualify(
-                args.project,
-                repeats=args.repeats,
-                timeout_s=args.timeout,
-                resume=args.resume,
-                stop_after=args.stop_after,
-            )
-            verdict = receipt["summary"]["verdict"]
-            print(
-                pretty_json(
-                    {
-                        "verdict": verdict,
-                        "run_id": receipt["run_id"],
-                        "report": f"runs/{receipt['run_id']}/report.md",
-                    }
-                ),
-                end="",
-            )
-            return {"PASS": 0, "FAIL": 1, "INCONCLUSIVE": 3}[verdict]
-        elif args.command == "verify":
-            result = verify_project(args.project, args.expected_manifest)
-            print(pretty_json(result), end="")
-            return 0 if result["valid"] else 4
-        elif args.command in {"show", "report"}:
-            receipt = load_latest_receipt(args.project)
-            if args.command == "report":
-                print(render_report(receipt), end="")
-                return 0
-            result = {
-                "run_id": receipt["run_id"],
-                "summary": receipt["summary"],
-                "findings": receipt["findings"],
-            }
-        elif args.command == "demo":
-            from .demo import run_demo
-
-            result = run_demo(args.output)
-        else:
-            return 2
-        print(pretty_json(result), end="")
-        return 0
+        return _dispatch(args)
     except ReleaseAssuranceError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

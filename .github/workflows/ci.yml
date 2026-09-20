@@ -33,8 +33,19 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e ".[dev]"
-      - run: python -m pytest -q
+      - name: Test with branch coverage
+        run: python -m coverage run -m pytest -q
+      - run: python -m coverage report -m
+      - run: python -m coverage json -o coverage.json
+      - name: Enforce production coverage
+        run: python tools/check_quality.py coverage.json
       - run: python -m ruff check .
+      - name: Enforce complexity budget
+        run: python -m ruff check src --select C901,PLR0911,PLR0912,PLR0915
+      - name: Static security scan
+        run: python -m bandit -r src -q
+      - name: Dead-code scan
+        run: python -m vulture src --min-confidence 80
       - run: python -m ruff format --check .
       - run: python -m mypy
       - run: python -m build

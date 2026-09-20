@@ -1,22 +1,13 @@
 # Contributing
 
-Keep this a small endpoint-contract checker. Changes should include a focused test
-and explain a user-visible behavior or corrected failure mode. Do not add GPU/model
-requirements, experimental research pipelines, prospect data, generated reports from
-real endpoints, or credentials.
+Keep this project a focused endpoint-contract regression checker. Changes should have a clear user-visible or correctness rationale and include targeted tests. Do not add unrelated product machinery, real endpoint evidence, customer data, credentials, model weights, or mandatory GPU dependencies.
 
-Install `.[dev]` in a virtual environment and run the commands in the README. Tests
-must be runnable without external inference services. Use synthetic loopback fixtures;
-do not mock away the transport when testing HTTP/SSE behavior.
+Install `.[dev,security]` in a virtual environment and run the quality commands in the README. Tests must work without external inference services. Use synthetic loopback fixtures for HTTP/SSE behavior rather than replacing the transport with mocks when the transport itself is under test.
 
-A contract feature must be validated, enforced, documented, and tested for invalid
-input. A missing measurement must not silently pass its limit. Verification changes
-need negative tests for missing, duplicate, stale, and corrupted evidence.
+A contract feature must be validated, enforced, documented, and tested for invalid input. Missing measurements must not silently satisfy an acceptance limit. Evidence-verification changes need negative tests for missing, duplicate, stale, corrupted, contradictory, and identity-mismatched artifacts.
 
-Submit small pull requests. Include reproduction steps and test commands actually
-run; mark skipped/unavailable checks honestly. AI-assisted contributions are welcome,
-but authors remain responsible for source provenance, correctness, and review.
+Production branch coverage must remain at least 95% overall and 90% per Python module. Every production module must remain Radon A maintainability (MI ≥ 20), every code block must remain at complexity 10 or below, and the strict Ruff complexity gate must stay clean without suppressing genuine findings. Security, typing, lint, format, build, release-boundary, and isolated-wheel checks are release requirements rather than optional cleanup.
 
-Be respectful and factual in issues and reviews. For private security issues follow
-SECURITY.md, not the public issue tracker. Maintenance is best-effort; substantial new
-features should be discussed before implementation.
+Submit focused pull requests. Include reproduction steps and the commands actually run; identify skipped or unavailable checks explicitly. AI-assisted contributions are welcome, but contributors remain responsible for provenance, correctness, tests, and review.
+
+Be respectful and factual in issues and reviews. Report vulnerabilities through the private route described in SECURITY.md rather than posting exploit details publicly. Maintenance is best-effort; discuss substantial scope expansions before implementation.

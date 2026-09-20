@@ -1,19 +1,14 @@
 # Computelab Release Assurance
 
-**Check an LLM deployment change against the behaviors your application requires.**
+**Check an LLM deployment change against the behaviors your application actually requires.**
 
-Give the CLI a baseline endpoint, a candidate endpoint, and a JSON contract. It runs
-both, checks structured responses and tool calls, records client-side timings,
-and writes a reproducible **PASS**, **FAIL**, or **INCONCLUSIVE** report.
+Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with a candidate against an explicit JSON contract. It records bounded client-side evidence and returns a reproducible **PASS**, **FAIL**, or **INCONCLUSIVE** verdict.
 
-This is a small, experimental regression checker—not a model judge, load generator,
-safety certification, or inference optimizer. You control the endpoints and tests.
-Python 3.11+ is targeted; no GPU, model weights, API subscription, or agent framework
-is required by the tool itself. The runtime dependency is `jsonschema`.
+The project is intentionally narrow: it is a regression checker, not a model judge, load generator, safety certification, capacity benchmark, or inference optimizer. You choose the endpoints and the acceptance contract. Python 3.11+ is supported; the runtime has one dependency, `jsonschema`, and requires no GPU, model weights, agent framework, or paid API by itself.
 
-## Try the local demo
+## Quick start
 
-From this source directory:
+From a source checkout:
 
 ```sh
 python -m venv .venv
@@ -23,14 +18,9 @@ python -m pip install .
 computelab-release demo --output demo-output
 ```
 
-Package installation may need PyPI access. The installed demo needs no external
-network: it starts a temporary loopback HTTP server with synthetic completions.
-It checks compatible output, a deliberately broken JSON response, and an
-unavailable candidate. Expected results are **PASS**, **FAIL**, and **INCONCLUSIVE**.
-The demo returns zero only when all expected decisions and evidence checks pass.
-It never deletes an existing output directory.
+The installed demo runs entirely on loopback with synthetic completions. It exercises a compatible candidate, a deliberate structured-output regression, and an unavailable candidate; the expected verdicts are **PASS**, **FAIL**, and **INCONCLUSIVE**. Existing output directories are never deleted automatically.
 
-Inspect the seeded regression:
+Inspect the synthetic regression:
 
 ```sh
 computelab-release show demo-output/regression
@@ -38,12 +28,11 @@ computelab-release report demo-output/regression
 computelab-release verify demo-output/regression
 ```
 
-See a [sample report](examples/report.md).
+See the [sample report](examples/report.md).
 
-## Compare your deployments
+## Compare deployments
 
-Use test endpoints you own or have permission to call. Requests can consume
-inference capacity; the tool never starts or modifies a model server.
+Use endpoints you own or are authorized to test. Requests can consume inference capacity; this tool never starts or modifies a model server.
 
 ```sh
 computelab-release init upgrade-check
@@ -54,11 +43,7 @@ computelab-release qualify upgrade-check
 computelab-release verify upgrade-check
 ```
 
-For authenticated deployments, supply **HTTPS** endpoints and `--api-key-env` naming
-an existing environment variable. Never put a key in a URL or contract. Plain HTTP
-is supported for intentional local/private test deployments without credentials;
-bearer credentials over HTTP are rejected, even on loopback. Redirects and implicit
-proxy-environment use are disabled.
+For authenticated deployments, use **HTTPS** and `--api-key-env` to name an existing environment variable. Never place a key in a URL or contract. Plain HTTP is supported only for intentional unauthenticated local/private test deployments; bearer credentials over HTTP are rejected. Redirects and implicit proxy-environment use are disabled.
 
 | Exit code | Meaning |
 |---:|---|
@@ -68,72 +53,65 @@ proxy-environment use are disabled.
 | 3 | Qualification is INCONCLUSIVE |
 | 4 | Evidence verification failed |
 
-`report` prints Markdown. `show` and `verify` print JSON. A successful evidence
-verification is not the same as a passing deployment verdict.
+`report` prints Markdown. `show` and `verify` print JSON. Evidence verification and deployment qualification are deliberately separate: a self-consistent evidence bundle does not imply a passing candidate.
 
-## What gets checked
+## Contract checks
 
-Contracts can require inline JSON Schema structure, exact JSON values, required
-text, required function calls and argument subsets. Streaming tool fragments are
-reassembled before checks. Missing, truncated, oversized, or malformed responses
-do not become successful samples. See [the contract reference](docs/contract.md).
+Contracts can require inline JSON Schema structure, exact JSON values, required text, and required function calls with argument subsets. Streaming tool fragments are reassembled before validation. Missing, truncated, oversized, malformed, or incomplete responses cannot silently become successful samples. See the [contract reference](docs/contract.md).
 
-Optional latency limits use **observed client-side samples**. TTFT is available
-only from streamed content events. Time/token is an estimate requiring server
-usage counts; words are never substituted for tokens. No confidence interval,
-server-capacity measurement, or causal speedup claim is implied.
+Optional performance limits operate on **observed client-side samples**. TTFT exists only for streamed content events. Time/token is an estimate that requires server-reported token counts; words are never substituted for tokens. The tool makes no confidence-interval, server-capacity, or causal speedup claim.
 
 ## Evidence and recovery
 
-Each run writes input snapshots, result rows, a report, and a SHA-256 manifest.
-Verification checks complete request coverage, input identities, required files,
-and recomputes the decision and report from recorded rows. An optional
-`verify --expected-manifest SHA256` checks against a digest you stored separately.
-Unsigned self-contained hashes do **not** authenticate the experiment or its author.
+Each run records input snapshots, result rows, a deterministic report, and a SHA-256 manifest. Verification checks request coverage, input identities, required artifacts, hashes, and recomputes the decision and Markdown report from recorded rows.
 
-Runs checkpoint between requests. Resume with the same parameters:
+For stronger tamper detection, store a manifest digest separately and verify it later:
+
+```sh
+computelab-release verify upgrade-check --expected-manifest <sha256>
+```
+
+The manifest establishes consistency, not publisher identity or truth of remote execution.
+
+Runs checkpoint between requests. Resume only with unchanged inputs and policy:
 
 ```sh
 computelab-release qualify upgrade-check --resume
 ```
 
-Changed inputs, runtime policy, or timeout reject stale resumes. A request that was
-in flight when the process died has an unknown server outcome: it is **not silently
-reissued**. Preserve that run and start a separate project for a new attempt.
+An in-flight request at process death has an unknown remote outcome and is never silently replayed. Preserve that interrupted run and start a separate project for a fresh attempt.
 
-## Privacy and limits
+## Privacy and security
 
-**Project directories are private data.** They contain your supplied contract,
-prompts, endpoint registration, and input snapshots. Extra raw model responses are
-not retained by default; errors use value-free codes. `safe_to_store` is an explicit
-opt-in intended only for synthetic fixtures. Never publish a real run directory.
-Hashes of low-entropy content are not anonymization.
+**Treat project directories as private data.** They contain your contract, prompts, endpoint registration, and input snapshots. Raw response text is not retained by default; `safe_to_store` is an explicit opt-in intended for synthetic fixtures only. Hashes of low-entropy content are not anonymization.
 
-The CLI trusts the local operator and contract author. It is not an untrusted-URL
-service, hostile-local-user sandbox, or statistically powered benchmark framework.
-See [SECURITY.md](SECURITY.md) and [architecture and limits](docs/architecture.md).
+The CLI trusts the local operator and contract author. It is not a hostile-local-user sandbox or an SSRF defense for a service that accepts untrusted endpoint URLs. See [SECURITY.md](SECURITY.md) and [architecture and limits](docs/architecture.md) for the exact trust boundaries.
 
-## Development
+## Development and quality gates
+
+Install development dependencies and run:
 
 ```sh
-python -m pip install -e ".[dev]"
-python -m pytest
+python -m pip install -e ".[dev,security]"
+python -m coverage run -m pytest -q
+python -m coverage report -m
+python -m coverage json -o coverage.json
+python tools/check_quality.py coverage.json
 python -m ruff check .
+python -m ruff check src --select C901,PLR0911,PLR0912,PLR0915
 python -m ruff format --check .
 python -m mypy
+python -m bandit -r src -q
+python -m vulture src --min-confidence 80
 python -m build
+python tools/check_release.py
+python tools/wheel_smoke.py
 ```
 
-Tests use loopback synthetic servers, never paid APIs or downloaded models. See
-[CONTRIBUTING.md](CONTRIBUTING.md). This is a portfolio OSS project with bounded
-maintenance, not a supported commercial service. There is no support SLA.
+The quality gate requires at least **95% production branch coverage overall**, **90% for every production Python module**, **Radon A maintainability (MI ≥ 20) for every production module**, and **cyclomatic complexity ≤ 10 for every block**. Tests use synthetic loopback servers; hosted CI requires no inference credentials, paid APIs, GPUs, or self-hosted runners. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The CLI was extracted and hardened from Computelab's private experimental toolkit.
-The public package intentionally excludes research engines, benchmark databases,
-model assets, prospect records, and historical campaign machinery.
+This is an experimental open-source project with best-effort maintenance and no support SLA.
 
 ## License
 
-MIT for this source and documentation. Dependencies retain their own licenses and
-are installed separately; this repository does not redistribute model weights or
-third-party matrix-algorithm datasets.
+MIT for this source and documentation. Dependencies retain their own licenses and are installed separately. The repository does not redistribute model weights or third-party datasets.
