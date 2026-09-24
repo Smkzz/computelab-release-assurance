@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Expanded the README with scan-friendly scope, audience, badges, workflow diagram, actual demo output shape, an inline minimal contract, a rendered report excerpt, and troubleshooting guidance.
+
 ## 0.1.1 — 2026-09-20
 
 Quality-hardening release with no intended change to the v0.1 contract semantics.

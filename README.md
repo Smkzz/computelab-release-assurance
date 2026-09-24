@@ -1,10 +1,46 @@
 # Computelab Release Assurance
 
+[![Release](https://img.shields.io/github/v/release/Smkzz/computelab-release-assurance?display_name=tag)](https://github.com/Smkzz/computelab-release-assurance/releases/latest)
+[![CPU verification](https://github.com/Smkzz/computelab-release-assurance/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Smkzz/computelab-release-assurance/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-3776AB)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 **Check an LLM deployment change against the behaviors your application actually requires.**
 
 Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with a candidate against an explicit JSON contract. It records bounded client-side evidence and returns a reproducible **PASS**, **FAIL**, or **INCONCLUSIVE** verdict.
 
-The project is intentionally narrow: it is a regression checker, not a model judge, load generator, safety certification, capacity benchmark, or inference optimizer. You choose the endpoints and the acceptance contract. Python 3.11+ is supported; the runtime has one dependency, `jsonschema`, and requires no GPU, model weights, agent framework, or paid API by itself.
+**Who this is for:** engineers shipping or upgrading OpenAI-compatible LLM endpoints who want a deterministic regression check before deployment, without introducing a model judge.
+
+### What it is
+
+- A contract-driven baseline-versus-candidate regression checker.
+- A bounded client-side runner for structured JSON, text, tool-call, and optional performance requirements.
+- An evidence generator with deterministic reports, hashes, checkpointing, and verification.
+- A CPU-only CLI with one runtime dependency, `jsonschema`.
+
+### What it is not
+
+- A model leaderboard, model judge, or general benchmark.
+- A load generator, capacity test, or statistically qualified speed benchmark.
+- A safety certification or proof of model correctness.
+- An inference optimizer or model-server manager.
+
+You choose the endpoints and acceptance contract. Python 3.11+ is supported; the tool requires no GPU, model weights, agent framework, or paid API by itself.
+
+## How it works
+
+```mermaid
+flowchart LR
+    B[Baseline endpoint] --> Q[Bounded paired requests]
+    C[Candidate endpoint] --> Q
+    K[JSON contract] --> Q
+    Q --> V[Validate required behavior and requested metrics]
+    V --> R[PASS / FAIL / INCONCLUSIVE]
+    R --> E[Evidence bundle + SHA-256 manifest]
+    E --> X[verify recomputes identities, decision, and report]
+```
+
+The baseline must qualify before a candidate can pass. Missing evidence, transport incompleteness, unavailable required metrics, or an unverifiable comparison produces **INCONCLUSIVE** instead of silently passing.
 
 ## Quick start
 
@@ -18,7 +54,41 @@ python -m pip install .
 computelab-release demo --output demo-output
 ```
 
-The installed demo runs entirely on loopback with synthetic completions. It exercises a compatible candidate, a deliberate structured-output regression, and an unavailable candidate; the expected verdicts are **PASS**, **FAIL**, and **INCONCLUSIVE**. Existing output directories are never deleted automatically.
+The installed demo runs entirely on loopback with synthetic completions. It exercises a compatible candidate, a deliberate structured-output regression, and an unavailable candidate. The demo itself asserts the expected outcomes.
+
+This is output captured from the local demo; manifest hashes will differ on another run:
+
+```json
+{
+  "external_network": false,
+  "scenarios": {
+    "compatible": {
+      "expected": "PASS",
+      "manifest_sha256": "b6a496afa40a5cccffef3f816332010d691057d961f22d5a189b5054bb35da36",
+      "observed": "PASS",
+      "result_rows": 8,
+      "verified": true
+    },
+    "regression": {
+      "expected": "FAIL",
+      "manifest_sha256": "239e83297e9a9a2c5dfef385a302905e9cf6fb106c266f30747eb349fb15dea5",
+      "observed": "FAIL",
+      "result_rows": 8,
+      "verified": true
+    },
+    "unavailable": {
+      "expected": "INCONCLUSIVE",
+      "manifest_sha256": "4c83c478ed1cc5086d77ac0b8f4c157b1baff505ccc58e0ecce8b0a2cfbfd3d0",
+      "observed": "INCONCLUSIVE",
+      "result_rows": 8,
+      "verified": true
+    }
+  },
+  "synthetic": true
+}
+```
+
+Existing output directories are never deleted automatically.
 
 Inspect the synthetic regression:
 
@@ -28,7 +98,20 @@ computelab-release report demo-output/regression
 computelab-release verify demo-output/regression
 ```
 
-See the [sample report](examples/report.md).
+A report is ordinary Markdown. The included synthetic regression renders like this:
+
+### FAIL
+
+> This verdict applies only to the recorded contract, requests and client-side observations.
+
+**Finding:** `candidate_compatibility_failure`
+
+| Endpoint | Planned | Completed | Transport errors | Compatibility failures |
+|---|---:|---:|---:|---:|
+| baseline | 4 | 4 | 0 | 0 |
+| candidate | 4 | 4 | 0 | 4 |
+
+See the full [sample report](examples/report.md).
 
 ## Compare deployments
 
@@ -55,6 +138,47 @@ For authenticated deployments, use **HTTPS** and `--api-key-env` to name an exis
 
 `report` prints Markdown. `show` and `verify` print JSON. Evidence verification and deployment qualification are deliberately separate: a self-consistent evidence bundle does not imply a passing candidate.
 
+## Minimal contract
+
+A contract can be small. This complete example asks both deployments to return JSON with a string `answer` field and requires two successful samples per side:
+
+```json
+{
+  "schema_version": "release-assurance-contract/v1",
+  "name": "Structured-output compatibility",
+  "repeats": 2,
+  "cases": [
+    {
+      "id": "structured-json-001",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return JSON with answer equal to healthy."
+        }
+      ],
+      "expected_json_schema": {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {
+          "answer": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "acceptance": {
+    "min_samples": 2,
+    "max_failure_rate": 0,
+    "max_malformed_output_rate": 0
+  },
+  "environment": {
+    "candidate_must_match": []
+  }
+}
+```
+
+The repository includes a ready-to-edit version at [examples/contract.json](examples/contract.json).
+
 ## Contract checks
 
 Contracts can require inline JSON Schema structure, exact JSON values, required text, and required function calls with argument subsets. Streaming tool fragments are reassembled before validation. Missing, truncated, oversized, malformed, or incomplete responses cannot silently become successful samples. See the [contract reference](docs/contract.md).
@@ -80,6 +204,28 @@ computelab-release qualify upgrade-check --resume
 ```
 
 An in-flight request at process death has an unknown remote outcome and is never silently replayed. Preserve that interrupted run and start a separate project for a fresh attempt.
+
+## Troubleshooting / FAQ
+
+**Why did I get INCONCLUSIVE instead of FAIL?**
+
+INCONCLUSIVE means the comparison could not support a reliable candidate verdict. Common causes are an unverified or mismatched required environment field, too few successful samples, a baseline that did not itself qualify, candidate transport errors, an unavailable required timing metric, or an invalid performance reference such as a non-positive baseline p95.
+
+**When should I use `--resume`?**
+
+Only when the contract, deployments, runtime policy, and recorded run identity are unchanged. Resume continues from completed request checkpoints. An in-flight request from a terminated process is deliberately not replayed because its remote outcome is unknown.
+
+**What if I changed the contract or deployment after an interrupted run?**
+
+Do not force-resume it. Preserve the old evidence and start a new project/run so observations from different inputs cannot be mixed.
+
+**Does `verify` mean the candidate passed?**
+
+No. `verify` checks evidence consistency and recomputes the recorded decision. A valid evidence bundle can contain PASS, FAIL, or INCONCLUSIVE.
+
+**Can I use an API key over plain HTTP?**
+
+No. Bearer credentials require HTTPS. Plain HTTP is accepted only for intentional unauthenticated local/private testing.
 
 ## Privacy and security
 
@@ -110,7 +256,7 @@ python tools/wheel_smoke.py
 
 The quality gate requires at least **95% production branch coverage overall**, **90% for every production Python module**, **Radon A maintainability (MI ≥ 20) for every production module**, and **cyclomatic complexity ≤ 10 for every block**. Tests use synthetic loopback servers; hosted CI requires no inference credentials, paid APIs, GPUs, or self-hosted runners. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-This is an experimental open-source project with best-effort maintenance and no support SLA.
+This is a pre-1.0 open-source project with best-effort maintenance and no support SLA. The current release is suitable for evaluation and real regression-checking workflows, but CLI and contract details may still evolve before 1.0.
 
 ## License
 
