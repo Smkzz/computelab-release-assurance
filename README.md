@@ -7,9 +7,11 @@
 
 **Check an LLM deployment change against the behaviors your application actually requires.**
 
-Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with a candidate against an explicit JSON contract. It records bounded client-side evidence and returns a reproducible **PASS**, **FAIL**, or **INCONCLUSIVE** verdict.
+Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with a candidate against an explicit [JSON contract](docs/contract.md). It records bounded client-side evidence using the documented [architecture and trust boundaries](docs/architecture.md) and returns a reproducible **PASS**, **FAIL**, or **INCONCLUSIVE** verdict.
 
 **Who this is for:** engineers shipping or upgrading OpenAI-compatible LLM endpoints who want a deterministic regression check before deployment, without introducing a model judge.
+
+**Contents:** [How it works](#how-it-works) · [Quick start](#quick-start) · [Compare deployments](#compare-deployments) · [Minimal contract](#minimal-contract) · [Evidence](#evidence-and-recovery) · [FAQ](#troubleshooting--faq) · [Security](#privacy-and-security) · [Development](#development-and-quality-gates)
 
 ### What it is
 
@@ -64,21 +66,21 @@ This is output captured from the local demo; manifest hashes will differ on anot
   "scenarios": {
     "compatible": {
       "expected": "PASS",
-      "manifest_sha256": "b6a496afa40a5cccffef3f816332010d691057d961f22d5a189b5054bb35da36",
+      "manifest_sha256": "281f2a049c937dcd02f47d594e4cbe201feb2db250eda59026b71113aeeec05f",
       "observed": "PASS",
       "result_rows": 8,
       "verified": true
     },
     "regression": {
       "expected": "FAIL",
-      "manifest_sha256": "239e83297e9a9a2c5dfef385a302905e9cf6fb106c266f30747eb349fb15dea5",
+      "manifest_sha256": "443a01a8c51ea41f9fdc460376f840a010f90028ecf4db62a99263f901565063",
       "observed": "FAIL",
       "result_rows": 8,
       "verified": true
     },
     "unavailable": {
       "expected": "INCONCLUSIVE",
-      "manifest_sha256": "4c83c478ed1cc5086d77ac0b8f4c157b1baff505ccc58e0ecce8b0a2cfbfd3d0",
+      "manifest_sha256": "6718c2f807eed0cd59e5038235b8809a1a7b0543c31fa53374dcc877180cc9df",
       "observed": "INCONCLUSIVE",
       "result_rows": 8,
       "verified": true
@@ -89,6 +91,8 @@ This is output captured from the local demo; manifest hashes will differ on anot
 ```
 
 Existing output directories are never deleted automatically.
+
+For a terminal-style replay of the same verified demo, see the [asciinema v2 capture](docs/demo.cast). If asciinema is installed, replay it locally with `asciinema play docs/demo.cast`.
 
 Inspect the synthetic regression:
 
@@ -125,6 +129,18 @@ computelab-release define-contract upgrade-check --input examples/contract.json
 computelab-release qualify upgrade-check
 computelab-release verify upgrade-check
 ```
+
+A successful `qualify` prints a small machine-readable result like this:
+
+```json
+{
+  "report": "runs/<run_id>/report.md",
+  "run_id": "<run_id>",
+  "verdict": "PASS"
+}
+```
+
+The following `verify` command should then return `"valid": true` with an empty `errors` list for a self-consistent evidence bundle.
 
 For authenticated deployments, use **HTTPS** and `--api-key-env` to name an existing environment variable. Never place a key in a URL or contract. Plain HTTP is supported only for intentional unauthenticated local/private test deployments; bearer credentials over HTTP are rejected. Redirects and implicit proxy-environment use are disabled.
 

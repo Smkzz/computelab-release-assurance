@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Expanded the README with scan-friendly scope, audience, badges, workflow diagram, actual demo output shape, an inline minimal contract, a rendered report excerpt, and troubleshooting guidance.
+- Added one-line README navigation, a replayable terminal demo capture (included in source distributions), a successful qualification output example, and first-mention links to the contract and architecture references.
 
 ## 0.1.1 — 2026-09-20
 
