@@ -1,7 +1,7 @@
 include LICENSE README.md SECURITY.md CONTRIBUTING.md CHANGELOG.md pyproject.toml
 recursive-include src/computelab_release *.py py.typed
 recursive-include tests *.py
-recursive-include docs *.md *.cast
-recursive-include examples *.json *.md
+recursive-include docs *.md *.cast *.png
+recursive-include examples *.json *.md *.py
 recursive-include tools *.py
 global-exclude *.pyc __pycache__ .DS_Store

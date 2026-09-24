@@ -11,7 +11,21 @@ Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with
 
 **Who this is for:** engineers shipping or upgrading OpenAI-compatible LLM endpoints who want a deterministic regression check before deployment, without introducing a model judge.
 
-**Contents:** [How it works](#how-it-works) · [Quick start](#quick-start) · [Compare deployments](#compare-deployments) · [Minimal contract](#minimal-contract) · [Evidence](#evidence-and-recovery) · [FAQ](#troubleshooting--faq) · [Security](#privacy-and-security) · [Development](#development-and-quality-gates)
+**Verdict model:** **PASS** exits 0, **FAIL** exits 1, and **INCONCLUSIVE** exits 3. INCONCLUSIVE means the recorded evidence cannot support a reliable pass/fail comparison; it is never treated as a pass. Operational/input errors exit 2 and evidence-verification failures exit 4.
+
+![Terminal demo showing PASS, FAIL, and INCONCLUSIVE outcomes](docs/demo-terminal.png)
+
+### Requirements
+
+| Requirement | Support |
+|---|---|
+| Python | 3.11+ |
+| OS | Ubuntu/Linux and Windows are exercised in hosted CI; other Python 3.11+ platforms are not currently in the hosted matrix |
+| GPU | Not required |
+| API key | Not required for installation, the local demo, or the included mock HTTP example; authenticated real endpoints may require a key via `--api-key-env` |
+| Network | Only the endpoint requests you choose to run; the demo and mock example stay on loopback |
+
+**Contents:** [Requirements](#requirements) · [How it works](#how-it-works) · [Quick start](#quick-start) · [HTTP example](#end-to-end-http-example) · [Compare deployments](#compare-deployments) · [Minimal contract](#minimal-contract) · [Evidence](#evidence-and-recovery) · [FAQ](#troubleshooting--faq) · [Security](#privacy-and-security) · [Development](#development-and-quality-gates)
 
 ### What it is
 
@@ -116,6 +130,36 @@ A report is ordinary Markdown. The included synthetic regression renders like th
 | candidate | 4 | 4 | 0 | 4 |
 
 See the full [sample report](examples/report.md).
+
+## End-to-end HTTP example
+
+The built-in demo manages its own loopback fixtures. To exercise the actual register → HTTP request → qualify → verify path yourself, run the included stdlib-only mock OpenAI server in one terminal:
+
+```sh
+python examples/mock_openai_server.py
+# baseline:  http://127.0.0.1:18765/v1
+# candidate: http://127.0.0.1:18766/v1
+```
+
+Then, from a second terminal in the repository:
+
+```sh
+computelab-release init http-example
+computelab-release register baseline http-example --url http://127.0.0.1:18765/v1 --model baseline-model
+computelab-release register candidate http-example --url http://127.0.0.1:18766/v1 --model candidate-model
+computelab-release define-contract http-example --input examples/contract.json
+computelab-release qualify http-example
+computelab-release verify http-example
+```
+
+The checked example produces a passing qualification followed by valid evidence:
+
+```text
+qualify -> {"verdict": "PASS", "report": "runs/<run_id>/report.md", ...}
+verify  -> {"valid": true, "errors": [], "trust": "self-consistency-only", ...}
+```
+
+Both mock endpoints are real local HTTP servers that implement `/v1/chat/completions`; no external network, GPU, or API key is involved. Stop the mock server with Ctrl+C when finished.
 
 ## Compare deployments
 
