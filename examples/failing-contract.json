@@ -1,0 +1,27 @@
+{
+  "schema_version": "release-assurance-contract/v1",
+  "name": "Exact JSON regression",
+  "repeats": 2,
+  "cases": [
+    {
+      "id": "exact-json-001",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Return JSON with answer equal to healthy."
+        }
+      ],
+      "exact_json": {
+        "answer": "healthy"
+      }
+    }
+  ],
+  "acceptance": {
+    "min_samples": 2,
+    "max_failure_rate": 0,
+    "max_malformed_output_rate": 0
+  },
+  "environment": {
+    "candidate_must_match": []
+  }
+}

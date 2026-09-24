@@ -39,6 +39,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(400)
             return
 
+        answer = "regressed" if request.get("model") == "candidate-bad" else "healthy"
         body = json.dumps(
             {
                 "choices": [
@@ -46,7 +47,7 @@ class Handler(BaseHTTPRequestHandler):
                         "index": 0,
                         "message": {
                             "role": "assistant",
-                            "content": json.dumps({"answer": "healthy"}, separators=(",", ":")),
+                            "content": json.dumps({"answer": answer}, separators=(",", ":")),
                         },
                         "finish_reason": "stop",
                     }
