@@ -11,6 +11,14 @@ Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with
 
 **Who this is for:** engineers shipping or upgrading OpenAI-compatible LLM endpoints who want a deterministic regression check before deployment, without introducing a model judge.
 
+**Contents:** [Why this exists](#why-this-exists) | [Requirements](#requirements) | [How it works](#how-it-works) | [Quick start](#quick-start) | [Failing example](#minimal-failing-contract) | [HTTP example](#end-to-end-http-example) | [Limitations](#limitations) | [Evidence](#evidence-and-recovery) | [FAQ](#troubleshooting--faq) | [Development](#development-and-quality-gates)
+
+**Docs:** [Contract reference](docs/contract.md) | [Architecture and limits](docs/architecture.md) | [Changelog](CHANGELOG.md)
+
+### Why this exists
+
+Model judges answer questions such as “which output looks better?” and broad benchmarks compare model capability across fixed tasks. Release Assurance solves a narrower deployment problem: **did this candidate still satisfy the explicit behaviors my application depends on, and is there enough recorded evidence to say so?** It uses operator-defined contracts and fail-closed evidence instead of asking another model to score the candidate.
+
 **Verdict model:** **PASS** exits 0, **FAIL** exits 1, and **INCONCLUSIVE** exits 3. INCONCLUSIVE means the recorded evidence cannot support a reliable pass/fail comparison; it is never treated as a pass. Operational/input errors exit 2 and evidence-verification failures exit 4.
 
 ![Terminal demo showing PASS, FAIL, and INCONCLUSIVE outcomes](docs/demo-terminal.png)
@@ -24,8 +32,6 @@ Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with
 | GPU | Not required |
 | API key | Not required for installation, the local demo, or the included mock HTTP example; authenticated real endpoints may require a key via `--api-key-env` |
 | Network | Only the endpoint requests you choose to run; the demo and mock example stay on loopback |
-
-**Contents:** [Requirements](#requirements) · [How it works](#how-it-works) · [Quick start](#quick-start) · [HTTP example](#end-to-end-http-example) · [Compare deployments](#compare-deployments) · [Minimal contract](#minimal-contract) · [Evidence](#evidence-and-recovery) · [FAQ](#troubleshooting--faq) · [Security](#privacy-and-security) · [Development](#development-and-quality-gates)
 
 ### What it is
 
@@ -42,6 +48,10 @@ Computelab Release Assurance compares a baseline OpenAI-compatible endpoint with
 - An inference optimizer or model-server manager.
 
 You choose the endpoints and acceptance contract. Python 3.11+ is supported; the tool requires no GPU, model weights, agent framework, or paid API by itself.
+
+## Limitations
+
+Release Assurance can show that the **recorded requests** satisfied or violated the **recorded contract** under the observed client-side conditions. It cannot prove model correctness or safety, authenticate that a remote service truly performed the claimed computation, establish server capacity, turn small timing samples into statistically significant performance claims, or make operator-supplied environment metadata trustworthy. An unsigned manifest proves self-consistency, not publisher identity; use a separately trusted manifest digest when later bundle replacement matters.
 
 ## How it works
 
@@ -116,20 +126,67 @@ computelab-release report demo-output/regression
 computelab-release verify demo-output/regression
 ```
 
-A report is ordinary Markdown. The included synthetic regression renders like this:
+A report is ordinary Markdown. See the full [sample report](examples/report.md).
 
-### FAIL
+## Minimal failing contract
 
-> This verdict applies only to the recorded contract, requests and client-side observations.
+In Terminal 1, start the included mock OpenAI server:
 
-**Finding:** `candidate_compatibility_failure`
+```sh
+python examples/mock_openai_server.py
+```
 
-| Endpoint | Planned | Completed | Transport errors | Compatibility failures |
+In Terminal 2, register the candidate with model `candidate-bad`. That model deliberately returns `{"answer":"regressed"}` while the baseline returns `{"answer":"healthy"}`. Save this contract as `failing-contract.json` (the same fixture is included at [examples/failing-contract.json](examples/failing-contract.json)):
+
+```json
+{
+  "schema_version": "release-assurance-contract/v1",
+  "name": "Exact JSON regression",
+  "repeats": 2,
+  "cases": [
+    {
+      "id": "exact-json-001",
+      "messages": [
+        {"role": "user", "content": "Return JSON with answer equal to healthy."}
+      ],
+      "exact_json": {"answer": "healthy"}
+    }
+  ],
+  "acceptance": {
+    "min_samples": 2,
+    "max_failure_rate": 0,
+    "max_malformed_output_rate": 0
+  },
+  "environment": {"candidate_must_match": []}
+}
+```
+
+Then run:
+
+```sh
+computelab-release init failing-example
+computelab-release register baseline failing-example --url http://127.0.0.1:18765/v1 --model baseline-model
+computelab-release register candidate failing-example --url http://127.0.0.1:18766/v1 --model candidate-bad
+computelab-release define-contract failing-example --input failing-contract.json
+computelab-release qualify failing-example
+computelab-release report failing-example
+```
+
+`qualify` exits **1** and reports **FAIL**. A verified local run produced this report core:
+
+```text
+## FAIL
+
+## Findings
+- candidate_compatibility_failure
+
+| Endpoint  | Planned | Completed | Transport errors | Compatibility failures |
 |---|---:|---:|---:|---:|
-| baseline | 4 | 4 | 0 | 0 |
-| candidate | 4 | 4 | 0 | 4 |
+| baseline  | 2 | 2 | 0 | 0 |
+| candidate | 2 | 2 | 0 | 2 |
+```
 
-See the full [sample report](examples/report.md).
+The evidence bundle from that failing run still passes `computelab-release verify`: evidence validity and candidate qualification are intentionally separate.
 
 ## End-to-end HTTP example
 
