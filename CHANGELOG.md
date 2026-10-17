@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Reject malformed JSON finish reasons as recorded protocol failures in both
+  ordinary and streaming responses, allowing qualification to finish with
+  verifiable INCONCLUSIVE evidence instead of an uncaught Python exception.
+- Bound server-reported token counts and persisted output-token counts to
+  nonnegative signed 64-bit integers before timing arithmetic.
+
 - Expanded the README with scan-friendly scope, audience, badges, workflow diagram, actual demo output shape, an inline minimal contract, a rendered report excerpt, and troubleshooting guidance.
 - Added one-line README navigation, a replayable terminal demo capture (included in source distributions), a successful qualification output example, and first-mention links to the contract and architecture references.
 - Added a top-level terminal image, scan-friendly requirements and verdict semantics, plus a runnable mock HTTP server demonstrating the real register/qualify/verify path.

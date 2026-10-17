@@ -33,6 +33,8 @@ independent replications, or an inference-performance publication.
 TTFT is measured to the first non-empty text/tool content SSE event, not headers or
 a role-only event. Non-streamed responses cannot supply TTFT. Time/token is estimated
 only with streamed first-content time and server-reported output-token counts >1.
+Usage counters must be nonnegative integers no larger than 2^63 − 1; larger or
+non-integer values produce a transport failure before timing arithmetic.
 Missing required metrics yield INCONCLUSIVE. The serial request-rate metric includes
 observed request time; it is not server capacity.
 

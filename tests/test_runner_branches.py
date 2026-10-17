@@ -66,6 +66,7 @@ def valid_rows():
         ({"tpot_ms": -1}, "invalid timing"),
         ({"output_tokens": True}, "invalid token count"),
         ({"output_tokens": -1}, "invalid token count"),
+        ({"output_tokens": 2**63}, "invalid token count"),
         ({"response_sha256": "bad"}, "invalid response hash"),
         ({"response_sha256": None}, "successful transport"),
         ({"error_kind": "error"}, "successful transport"),

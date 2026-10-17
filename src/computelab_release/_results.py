@@ -7,6 +7,7 @@ from typing import Any
 
 from ._evaluation import _request_payload
 from .models import EvidenceValidationError, finite_number, sha256_json
+from .transport import MAX_TOKEN_COUNT
 
 
 def _validate_error_codes(errors: Any) -> list[str]:
@@ -47,7 +48,7 @@ def _validate_result_metrics(row: dict[str, Any]) -> None:
         if value is not None and not finite_number(value, 0, row["latency_ms"]):
             raise EvidenceValidationError("invalid timing value")
     tokens = row.get("output_tokens")
-    if tokens is not None and (type(tokens) is not int or tokens < 0):
+    if tokens is not None and (type(tokens) is not int or not 0 <= tokens <= MAX_TOKEN_COUNT):
         raise EvidenceValidationError("invalid token count")
     _validate_result_transport(row)
 

@@ -30,6 +30,7 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_LINE_BYTES = 64 * 1024
 MAX_EVENTS = 16384
 MAX_TOOLS = 32
+MAX_TOKEN_COUNT = 2**63 - 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +60,7 @@ def _usage(value: Any) -> dict[str, int]:
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         if key in value:
             number = value[key]
-            if type(number) is not int or number < 0:
+            if type(number) is not int or not 0 <= number <= MAX_TOKEN_COUNT:
                 raise ProtocolError("invalid_usage")
             result[key] = number
     return result
@@ -218,9 +219,9 @@ class StreamParser:
     def _finish_choice(self, choice: dict[str, Any]) -> None:
         finish = choice.get("finish_reason")
         if finish is not None:
-            if finish in {"length", "content_filter"}:
+            if finish in ("length", "content_filter"):
                 raise ProtocolError("incomplete_completion")
-            if finish not in {"stop", "tool_calls"}:
+            if finish not in ("stop", "tool_calls"):
                 raise ProtocolError("unsupported_finish_reason")
             if self.finished:
                 raise ProtocolError("duplicate_finish_reason")

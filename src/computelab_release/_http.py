@@ -76,9 +76,10 @@ def _nonstream_choice(choice: dict[str, Any]) -> tuple[str, list[dict[str, Any]]
     if type(choice.get("index", 0)) is not int or choice.get("index", 0) != 0:
         raise ProtocolError("unsupported_choice_index")
     finish = choice.get("finish_reason")
-    if finish in {"length", "content_filter"}:
+    # Tuple membership also rejects JSON arrays/objects without hashing them.
+    if finish in ("length", "content_filter"):
         raise ProtocolError("incomplete_completion")
-    if finish not in {"stop", "tool_calls"}:
+    if finish not in ("stop", "tool_calls"):
         raise ProtocolError("missing_or_unsupported_finish_reason")
     message = choice.get("message")
     if not isinstance(message, dict):
